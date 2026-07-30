@@ -64,3 +64,8 @@ site/sitemap.xml
 site/llms.txt
 site/build-meta.js
 book/_build/
+
+
+.pt
+.pth
+.safetensors
