@@ -84,3 +84,6 @@ site/langs.js
 
 .claude/
 .claude-flow/
+.pt
+.pth
+.safetensors
