@@ -82,7 +82,6 @@ i18n/*/.cache/
 i18n/*/.translate-cache.json
 site/langs.js
 
-.claude/
 .claude-flow/
 .pt
 .pth
