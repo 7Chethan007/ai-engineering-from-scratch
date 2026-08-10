@@ -2,13 +2,13 @@
 
 Operating manual for contributors and AI agents touching this repo. Read it before opening a PR.
 
-The repo is a curriculum, not a SaaS app. The lessons are the product. Every rule below keeps 435 lessons coherent over time.
+The repo is a curriculum, not a SaaS app. The lessons are the product. Every rule below keeps 503 lessons coherent over time.
 
 ---
 
 ## Philosophy
 
-435 lessons. 20 phases. Every algorithm built from raw math before a single framework gets imported. You write backprop, the tokenizer, the attention mechanism, and the agent loop by hand in Python, TypeScript, Rust, or Julia. Then you run the same operation through the production library so the framework stops being a black box. The "Build It / Use It" split is the spine. Each lesson ships a reusable artifact you can plug into your daily workflow.
+503 lessons. 20 phases. Every algorithm built from raw math before a single framework gets imported. You write backprop, the tokenizer, the attention mechanism, and the agent loop by hand in Python, TypeScript, Rust, or Julia. Then you run the same operation through the production library so the framework stops being a black box. The "Build It / Use It" split is the spine. Each lesson ships a reusable artifact you can plug into your daily workflow.
 
 ---
 
@@ -33,9 +33,15 @@ certifications/claude/
   tracks/*.json               # exam blueprint, ordered route, study plans
   lessons/NN-slug/            # shared certification lesson contract
   assessments/<exam-code>/    # original diagnostics and full mocks
-scripts/                      # automation
+scripts/                      # automation (audits, catalog, book, i18n, scaffolders)
+skills/                       # canonical curriculum skills (learn, course-guide, claude-certification, ...)
+.claude/skills/               # MUST mirror skills/ exactly — CI diffs them and blocks on divergence
+i18n/                         # per-language translated READMEs (committed); lesson translations live on the `translations` branch
+docs/i18n.md                  # the i18n pipeline reference
 .github/workflows/
   curriculum.yml              # invariant + auto-sync workflow
+  translate.yml               # machine-translates lessons (NLLB-200) to a separate `translations` branch
+  build-book.yml              # assembles lesson markdown into EPUB/PDF via pandoc
 ```
 
 ---
@@ -49,6 +55,7 @@ scripts/                      # automation
 5. **Original implementations only.** Don't cite external curriculum repos in docs, code comments, or commit text. Cite RFCs, official specs, and academic papers when they are the canonical source.
 6. **Dependency allowlist** (see `Dependencies` below). Stdlib-first.
 7. **Never commit generated files**: `catalog.json` is gitignored, `site/data.js` is rebuilt by CI, `package-lock.json` is never tracked.
+8. **`skills/` is canonical; `.claude/skills/` is a byte-for-byte mirror.** CI runs `diff -r skills .claude/skills` and blocks on any divergence. Editing a skill means updating both trees in the same commit. `scripts/install_skills.py` copies `outputs/` artifacts (skills/prompts/agents) into targets — it does not own the skills mirror.
 
 ---
 
@@ -62,6 +69,8 @@ scripts/                      # automation
 | Julia      | `Random`, `Statistics`, `LinearAlgebra`, `Printf` (Julia stdlib)          |
 
 If a finding suggests a banned dep, skip it with the reason "stays stdlib-first for educational clarity."
+
+The root `requirements.txt` is **authoring tooling** (jupyter, matplotlib, transformers, SDKs) for running lessons locally — it is not the lesson dependency allowlist above. Lesson code still must not import anything outside its language row.
 
 ---
 
@@ -209,7 +218,12 @@ Run locally before pushing:
 ```bash
 python3 scripts/audit_lessons.py
 python3 scripts/audit_certifications.py
-python3 scripts/check_readme_counts.py        # advisory — CI fixes on merge
+python3 scripts/backfill_certification_references.py --check
+python3 scripts/debias_quizzes.py --check
+python3 scripts/debias_certification_questions.py --check
+python3 scripts/build_readme_i18n.py --check    # if you touched README.md
+diff -r skills .claude/skills                    # if you touched skills/
+python3 scripts/check_readme_counts.py           # advisory — CI fixes on merge
 
 # For each lesson touched:
 cd phases/NN-phase/MM-lesson/code
@@ -220,10 +234,14 @@ CI gates (`.github/workflows/curriculum.yml`):
 
 | Job                              | Trigger      | Behavior                                              |
 |----------------------------------|--------------|-------------------------------------------------------|
-| `audit`                          | push + PR    | Runs `audit_lessons.py`. Blocking.                    |
-| `readme-counts-sync` (main only) | push to main | Rebuilds catalog + auto-fixes README counts.         |
+| `audit`                          | push + PR    | Blocking. Runs `audit_lessons.py`, `audit_certifications.py`, `backfill_certification_references.py --check`, certification `main.py`/tests, `debias_*.py --check`, `build_readme_i18n.py --check`, `test_translate_workflow.py`, `node site/build.js`, and `diff -r skills .claude/skills`. |
+| `readme-counts-sync` (main only) | push to main | Rebuilds catalog, auto-fixes README counts, regenerates `i18n/*/README.md`. |
 | `site-rebuild` (main only)       | push to main | Re-runs `node site/build.js`, commits `site/data.js`. |
 | `readme-counts-drift`            | PR           | Advisory only — main self-heals on merge.             |
+| `translate` (`.github/workflows/translate.yml`) | push to main | Machine-translates lessons (NLLB-200, no API key) to a separate `translations` branch. |
+| `build-book` (`.github/workflows/build-book.yml`) | push to main | Builds EPUB volumes via `scripts/build_book.py`. |
+
+Certification lessons also have their own lab gates in the audit job: every `certifications/claude/lessons/*/code/main.py` must run and every `code/tests/test_*.py` must pass.
 
 ---
 
@@ -231,11 +249,14 @@ CI gates (`.github/workflows/curriculum.yml`):
 
 **CI handles automatically — do not touch in your PR:**
 
-| Surface              | Bot                            | When                |
-|----------------------|--------------------------------|---------------------|
-| `catalog.json`       | rebuilt on demand (gitignored) | every CI job        |
-| `README.md` counts   | `readme-counts-sync`           | on push to main     |
-| `site/data.js`       | `site-rebuild`                 | on push to main     |
+| Surface                       | Bot                            | When                |
+|-------------------------------|--------------------------------|---------------------|
+| `catalog.json`                | rebuilt on demand (gitignored) | every CI job        |
+| `README.md` counts            | `readme-counts-sync`           | on push to main     |
+| `site/data.js` + other site artifacts (`certification-data.js`, `sitemap.xml`, `llms.txt`, `build-meta.js`, `langs.js`) | `site-rebuild` / Vercel build | on push to main / deploy |
+| translated lessons (`i18n/*/phases/`) | `translate` workflow | on push to main, to the `translations` branch — never `main` |
+
+`site/build.js` also regenerates `site/langs.js` (gitignored) from `languages.json` — never hand-edit any of these; they are all derived.
 
 **You handle:**
 
@@ -246,6 +267,8 @@ CI gates (`.github/workflows/curriculum.yml`):
 | `glossary/terms.md`           | when introducing a term used by more than one lesson             |
 
 **Common bug**: if `grep -c 'tree/main/phases/NN-' site/data.js` is 0 after merge, the Phase NN README rows are plain text and missing the `[Title](phases/NN-...)` markdown link. `site/build.js` derives the URL from that link.
+
+**i18n**: English lessons are canonical. Translated lesson markdown goes to the `translations` branch only — never commit anything under `i18n/*/phases/` or `i18n/*/.cache/` to `main` (they are gitignored). The per-language `i18n/<lang>/README.md` is hand-authored and committed to `main`; regenerate it with `python3 scripts/build_readme_i18n.py` after touching `README.md`. Adding a language means editing `languages.json` (the single registry). See `docs/i18n.md` for the full pipeline.
 
 ---
 
@@ -280,6 +303,8 @@ Avoid `git push --force` to a branch with open review comments. Force-push detac
 ## New-lesson onboarding
 
 ```bash
+# Fastest start — scripts/scaffold-lesson.sh <phase-dir> <slug> [title] creates
+# the skeleton (code/, notebook/, docs/, outputs/ + docs/en.md from LESSON_TEMPLATE.md).
 mkdir -p phases/NN-phase-slug/MM-new-lesson/{docs,code/tests,outputs}
 
 # 1. Write docs/en.md with the frontmatter above.
@@ -306,4 +331,4 @@ gh pr create --title "feat(phase-NN/MM): add <slug>" --body "<5-line summary>"
 
 ---
 
-Last reviewed: 2026-05-27.
+Last reviewed: 2026-08-10.
