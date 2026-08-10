@@ -181,6 +181,33 @@ Public certification pages and lesson context must also state that this is an
 independent community curriculum that is not affiliated with, endorsed by,
 sponsored by, or authorized by Anthropic.
 
+### Learning harness
+
+`.harness/` at the repo root tracks the maintainer's personal day-by-day
+progress through this curriculum — separate from the curriculum content
+itself, and separate from the certification learner-mode state below. Full
+structure and protocol live in `.harness/README.md`; do not duplicate that
+detail here, only the trigger.
+
+When the user says **"update harness"**, for today's date (`YYYY-MM-DD`):
+
+1. Write/update `.harness/tracker/tracker-<DATE>.md` (copy `_TEMPLATE.md` if
+   new) — lessons/phases covered, time spent, concepts learned, artifacts
+   produced, stuck points, tomorrow's plan. Pull this from what actually
+   happened in the session; never invent progress.
+2. Write/update `.harness/linkedin/post-<DATE>.md` (copy `_TEMPLATE.md` if
+   new) — draft or refine a short LinkedIn post about the day's learning. If
+   told the post is already live, fill in `Posted URL` under Status; never
+   check the "Posted" box without a URL.
+3. Write/update `.harness/summaries/summary-<DATE>.md` (copy `_TEMPLATE.md`
+   if new) — a short revision-focused recap (5-10 bullets) for skimming
+   later.
+4. Add/update today's line in `.harness/INDEX.md` (newest first).
+5. Set `.harness/CURRENT.md` to today's date.
+
+This applies to Codex and any other agent that reads `AGENTS.md`; Claude Code
+carries the same instructions under `CLAUDE.md`.
+
 ### AI-native certification learner mode
 
 When a user asks to choose, start, resume, study, practice, or assess a Claude
