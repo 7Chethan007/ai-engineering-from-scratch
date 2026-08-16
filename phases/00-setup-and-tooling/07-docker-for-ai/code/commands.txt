@@ -76,7 +76,7 @@ docker images | grep ai-dev  # expect nothing
 # Reclaim dangling build cache (safe)
 docker system prune -f
 
-# DANGER: deletes ALL unused images (pod-backend etc.) - do NOT use casually
+# DANGER: deletes ALL unused images  - do NOT use casually
 # docker system prune -a
 
 --------------------------------------------------------------------
