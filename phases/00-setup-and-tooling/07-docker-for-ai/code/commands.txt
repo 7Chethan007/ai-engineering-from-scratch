@@ -1,0 +1,102 @@
+Docker for AI - lesson 07 command cheat sheet
+=============================================
+Lesson docs: phases/00-setup-and-tooling/07-docker-for-ai/docs/en.md
+Run everything from: phases/00-setup-and-tooling/07-docker-for-ai/code
+
+NOTE: This is an Apple Silicon Mac - no GPU passthrough into Docker.
+Use the CPU variant (Dockerfile.cpu). The lesson's CUDA Dockerfile
+cannot use a GPU on macOS.
+
+--------------------------------------------------------------------
+BUILD
+--------------------------------------------------------------------
+# Build the lean CPU image (python:3.12-slim + torch + jupyter)
+docker build -t ai-dev-cpu -f Dockerfile.cpu .
+
+# Build the lesson's original CUDA image (4-6GB, unusable on Mac GPU,
+# shown for comparison only)
+docker build -t ai-dev -f Dockerfile .
+
+# List images and sizes
+docker images
+
+--------------------------------------------------------------------
+RUN - Jupyter notebook inside the container
+--------------------------------------------------------------------
+# From the code/ directory - mounts the lesson code folder at /workspace
+docker run -d --name ai-dev-cpu -p 8888:8888 -v "$(pwd)":/workspace ai-dev-cpu
+
+# Mount the whole repo instead (from repo root)
+docker run -d --name ai-dev-cpu -p 8888:8888 -v "$(pwd)":/workspace ai-dev-cpu
+
+# Open in browser
+open http://localhost:8888
+
+# Run one-off commands in the container (no -d, no --name needed)
+docker run --rm -it ai-dev-cpu python -c "import torch; print(torch.__version__)"
+
+--------------------------------------------------------------------
+INSPECT - what is happening internally
+--------------------------------------------------------------------
+# See the running container and its port mapping
+docker ps
+
+# See all containers (including stopped)
+docker ps -a
+
+# Container logs (Jupyter startup, kernel activity)
+docker logs -f ai-dev-cpu
+
+# Run a command inside a running container
+docker exec ai-dev-cpu python -c "import torch; print(torch.cuda.is_available())"
+
+# Proves filesystem isolation: /Users/<you> does NOT exist inside the container
+docker exec ai-dev-cpu python -c "import os; print(os.path.exists('/Users/chethanmn'))"
+
+# See the container's own IP on the docker0 bridge
+docker inspect ai-dev-cpu | grep IPAddress
+
+--------------------------------------------------------------------
+LIFECYCLE - what each command does
+--------------------------------------------------------------------
+docker stop ai-dev-cpu   # pause (SIGTERM); container still exists; files kept
+docker start ai-dev-cpu  # resume a stopped container; Jupyter comes back
+docker rm ai-dev-cpu     # delete the container (unmounted files are lost)
+docker rmi ai-dev-cpu    # delete the image (~960MB freed)
+
+--------------------------------------------------------------------
+CLEANUP - remove everything related to this lesson
+--------------------------------------------------------------------
+docker stop ai-dev-cpu
+docker rm ai-dev-cpu
+docker rmi ai-dev-cpu
+docker ps -a | grep ai-dev   # expect nothing
+docker images | grep ai-dev  # expect nothing
+
+# Reclaim dangling build cache (safe)
+docker system prune -f
+
+# DANGER: deletes ALL unused images (pod-backend etc.) - do NOT use casually
+# docker system prune -a
+
+--------------------------------------------------------------------
+COMMON MISTAKES
+--------------------------------------------------------------------
+# Typo: missing dashes. Flags are --name / -p / -v. Image name has NO dashes.
+docker run -d name ai-dev-cpu ...          # WRONG - "name" treated as image
+docker run -d nname ai-dev-cpu ...         # WRONG - same reason
+docker run -d --name ai-dev-cpu -p 8888:8888 -v "$(pwd)":/workspace ai-dev-cpu   # RIGHT
+
+# docker rmi needs the IMAGE name, not the container ID
+docker rmi ai-dev-cpu                      # RIGHT
+
+--------------------------------------------------------------------
+KEY CONCEPTS TO REMEMBER
+--------------------------------------------------------------------
+- Container = minimal isolated computer (own filesystem + own network stack)
+- -v $(pwd):/workspace  = glues one host folder into the container
+- -p 8888:8888          = glues one host port to the container's port
+- Anything NOT mounted is invisible to the container (/Users/... does not exist inside)
+- Jupyter is just a Python web server; the kernel runs INSIDE the container
+- --ip=0.0.0.0 inside the container is required so the forwarded port can reach it
+- localhost inside the container is the container itself, not your Mac

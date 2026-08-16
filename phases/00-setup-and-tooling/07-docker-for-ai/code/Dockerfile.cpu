@@ -1,0 +1,20 @@
+# CPU-only variant of this lesson's Dockerfile for Apple Silicon Macs.
+# See phases/00-setup-and-tooling/07-docker-for-ai/docs/en.md ("No GPU?" section).
+# PyTorch CPU wheels are ~200 MB; the CUDA devel base this replaces is ~4 GB.
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1
+ENV JUPYTER_TOKEN=''
+
+RUN python -m pip install --no-cache-dir \
+    torch==2.6.0 \
+    numpy \
+    jupyter
+
+WORKDIR /workspace
+
+VOLUME ["/workspace", "/models"]
+
+EXPOSE 8888
+
+CMD ["jupyter", "notebook", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root", "--NotebookApp.token=''"]
