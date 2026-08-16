@@ -10,20 +10,20 @@ Total estimated time: ~314 hours, at your own pace.
 
 ## Phase 0: Setup & Tooling — 🚧 (~14 hours)
 
-| # | Lesson | Status | Est. |
-|---|--------|--------|------|
-| 01 | Dev Environment | ✅ | ~75 min |
-| 02 | Git & Collaboration | ✅ | ~45 min |
-| 03 | GPU Setup & Cloud | ✅ | ~75 min |
-| 04 | APIs & Keys | ⬚ | ~75 min |
-| 05 | Jupyter Notebooks | ⬚ | ~75 min |
-| 06 | Python Environments | ⬚ | ~75 min |
-| 07 | Docker for AI | ⬚ | ~75 min |
-| 08 | Editor Setup | ⬚ | ~75 min |
-| 09 | Data Management | ⬚ | ~75 min |
-| 10 | Terminal & Shell | ⬚ | ~45 min |
-| 11 | Linux for AI | ⬚ | ~45 min |
-| 12 | Debugging & Profiling | ⬚ | ~75 min |
+| #   | Lesson                | Status | Est.    |
+| -----| -----------------------| --------| ---------|
+| 01  | Dev Environment       | ✅      | ~75 min |
+| 02  | Git & Collaboration   | ✅      | ~45 min |
+| 03  | GPU Setup & Cloud     | ✅      | ~75 min |
+| 04  | APIs & Keys           | ✅      | ~75 min |
+| 05  | Jupyter Notebooks     | ✅      | ~75 min |
+| 06  | Python Environments   | ✅      | ~75 min |
+| 07  | Docker for AI         | ✅      | ~75 min |
+| 08  | Editor Setup          | ⬚      | ~75 min |
+| 09  | Data Management       | ⬚      | ~75 min |
+| 10  | Terminal & Shell      | ⬚      | ~45 min |
+| 11  | Linux for AI          | ⬚      | ~45 min |
+| 12  | Debugging & Profiling | ⬚      | ~75 min |
 
 ## Phase 1: Math Foundations — ⬚ (~23 hours)
 
