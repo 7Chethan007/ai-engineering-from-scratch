@@ -100,3 +100,195 @@ KEY CONCEPTS TO REMEMBER
 - Jupyter is just a Python web server; the kernel runs INSIDE the container
 - --ip=0.0.0.0 inside the container is required so the forwarded port can reach it
 - localhost inside the container is the container itself, not your Mac
+
+====================================================================
+LESSON EXERCISES (do these in order)
+====================================================================
+
+--------------------------------------------------------------------
+EXERCISE 1 - Build + run torch inside the container
+--------------------------------------------------------------------
+# 1a. Build the CPU image (first build downloads; the just-fixed
+#     build was canceled, so re-run it)
+docker build -t ai-dev-cpu -f Dockerfile.cpu .
+
+# 1b. Run torch and print its version inside a throwaway container
+#     (--rm deletes the container when the command exits)
+docker run --rm -it ai-dev-cpu python -c "import torch; print(torch.__version__)"
+
+# Expected output: 2.6.0+cpu  (the +cpu means the CPU build is active)
+
+# --- WHAT --rm DOES AND WHY ---
+# `docker run --rm` = delete the container automatically the moment it
+# exits. This command runs, prints the version, exits immediately, and the
+# container is gone. No cleanup step needed. Perfect for one-off checks.
+# Proof it's gone:  docker ps -a | grep torch-check   -> nothing
+
+# --- WITHOUT --rm (container survives after exit) ---
+# Same command, no --rm. Give it a name so you can find it later.
+docker run --name torch-check -it ai-dev-cpu python -c "import torch; print(torch.__version__)"
+
+# The container EXITS but still exists (in "Exited" state). You can see it:
+docker ps -a | grep torch-check
+
+# Remove it later (it's dead, so this just deletes the remains):
+docker rm torch-check
+
+# Compare: docker stop pauses a RUNNING container; docker rm deletes any
+# container (running or exited - use --force if it's still running).
+# --rm is shorthand for "create, run, and auto-delete" - use it for
+# short-lived checks, skip it when you need the container to persist
+# (e.g. the Jupyter server with -d).
+
+# 1c. Run it in the background to keep Jupyter available
+docker run -d --name ai-dev-cpu -p 8888:8888 -v "$(pwd)":/workspace ai-dev-cpu
+open http://localhost:8888
+
+
+
+
+
+--------------------------------------------------------------------
+EXERCISE 2 - docker-compose: inference server + vector database
+--------------------------------------------------------------------
+# The lesson's docker-compose.yml targets a CUDA GPU. A CPU copy
+# (docker-compose.cpu.yml) already exists in this folder:
+#   - builds Dockerfile.cpu (CPU torch, no CUDA)
+#   - no NVIDIA `deploy:` block
+#   - qdrant uses the plain v1.12.5 tag (multi-arch; auto-selects arm64)
+
+# 2a. Start both services (ai-dev + qdrant) in the background
+docker compose -f docker-compose.cpu.yml up -d
+
+# 2b. Verify both are running (note the shared compose network)
+docker compose -f docker-compose.cpu.yml ps
+
+# 2c. Verify the AI container reaches Qdrant BY SERVICE NAME.
+#     Inside the compose network, "qdrant" resolves to the qdrant container.
+docker compose -f docker-compose.cpu.yml exec ai-dev python -c "
+from urllib.request import urlopen
+import json
+print(json.load(urlopen('http://qdrant:6333/collections')))
+"
+# Expected: {"result": {"collections": []}}  <- empty collection list, server alive
+
+# 2d. Why this works: compose creates a private bridge network. Both services
+#     plug into it. Docker's internal DNS maps "qdrant" -> 172.x.x.x.
+#     The ai-dev container could NOT reach it via "localhost" (that's itself).
+
+# 2e. Tear it down when done (add -v to also delete qdrant's data volume)
+docker compose -f docker-compose.cpu.yml down
+
+--------------------------------------------------------------------
+EXERCISE 3 - Flask API server (your first inference server)
+--------------------------------------------------------------------
+# 3a. Add flask to Dockerfile.cpu. EDIT the file and add one line to
+#     the pip install RUN block:
+#
+#     RUN python -m pip install --no-cache-dir \
+#         torch==2.6.0 \
+#         numpy \
+#         jupyter \
+#         flask
+#
+# 3b. Rebuild with a NEW tag so you keep the plain image too
+docker build -t ai-dev-cpu-flask -f Dockerfile.cpu .
+
+# 3c. Write a tiny inference server. Save this as app.py in this folder:
+#     (a "model" = returns a canned prediction; in later lessons this
+#     becomes a real loaded model)
+#
+#     from flask import Flask, request, jsonify
+#     app = Flask(__name__)
+#
+#     def predict(x):
+#         return {"input": x, "prediction": 2 * x}   # fake model
+#
+#     @app.route("/predict", methods=["POST"])
+#     def handle():
+#         x = request.get_json()["x"]
+#         return jsonify(predict(x))
+#
+#     if __name__ == "__main__":
+#         app.run(host="0.0.0.0", port=5000)
+
+# 3d. Run it. -p 5000:5000 glues your Mac's :5000 to the container's :5000.
+#     Mount $(pwd) so the container sees app.py.
+docker run --rm -d --name flask-srv -p 5000:5000 \
+    -v "$(pwd)":/workspace -w /workspace \
+    ai-dev-cpu-flask python app.py
+
+# --- MACOS PORT 5000 PROBLEM (seen live on this machine) ---
+# Symptom:
+#   Error response from daemon: ports are not available: ... bind: address
+#   already in use
+# Root cause: macOS "AirPlay Receiver" (ControlCenter, PID from lsof below)
+# squats on TCP port 5000 for every user. It is NOT Docker or your container.
+# Prove who owns the port:
+lsof -i :5000
+#   You saw: ControlCe 696 chethanmn ... TCP *:commplex-main (LISTEN)
+#   "commplex-main" IS port 5000 (its service name in /etc/services).
+
+# Fix A (recommended) - remap the HOST port, leave the container port alone:
+docker run --rm -d --name flask-srv -p 5001:5000 \
+    -v "$(pwd)":/workspace -w /workspace \
+    ai-dev-cpu-flask python app.py
+# then test on 5001:
+curl -X POST http://localhost:5001/predict -H "Content-Type: application/json" \
+    -d '{"x": 21}'
+
+# Fix B - free port 5000 by disabling AirPlay Receiver:
+#   System Settings > General > AirDrop & Handoff > AirPlay Receiver: OFF
+#   then the original -p 5000:5000 command works.
+
+# Why: -p HOST:CONTAINER. The container port (right of ":") is fixed = where
+# Flask listens INSIDE (app.py: app.run(port=5000)). The host port (left of
+# ":") is YOUR choice - any free port works. Port conflicts live on the host,
+# not in the container. Container-side ports never conflict with each other.
+
+# 3e. Send a prediction request (new terminal tab)
+curl -X POST http://localhost:5000/predict -H "Content-Type: application/json" \
+    -d '{"x": 21}'
+# Expected: {"input":21,"prediction":42}
+
+# 3f. Watch the request land in the server's logs
+docker logs -f flask-srv
+
+# This IS the inference server pattern: model loaded once, exposed via HTTP,
+# any client can call it. Real ones (vLLM, Triton) do this with real weights.
+
+# 3g. Stop it
+docker stop flask-srv
+
+--------------------------------------------------------------------
+EXERCISE 4 - Image sizes: devel vs runtime base
+--------------------------------------------------------------------
+# The lesson contrasts nvidia/cuda:12.4.1-devel (compilers, ~4GB) with
+# runtime (~1.5GB). On your Mac these CUDA images can't run a GPU, but you
+# can still MEASURE the size difference (no build needed, just pull):
+docker pull nvidia/cuda:12.4.1-devel-ubuntu22.04
+docker pull nvidia/cuda:12.4.1-runtime-ubuntu22.04
+
+# Compare sizes
+docker images nvidia/cuda
+
+# Expected: devel ~4x bigger than runtime (compiler toolchain vs. just libs)
+
+# Compare against your CPU image:
+docker images | grep -E 'ai-dev|nvidia/cuda'
+
+# Your CPU image (~1GB) vs devel (~4GB): the compiler toolchain costs ~3GB.
+# Lesson tip: use devel only when you must compile (flash-attn, bitsandbytes);
+# use runtime for serving. Your Dockerfile.cpu skips CUDA entirely.
+
+# Clean up the CUDA images you can't use (frees ~5.5GB):
+docker rmi nvidia/cuda:12.4.1-devel-ubuntu22.04 nvidia/cuda:12.4.1-runtime-ubuntu22.04
+
+--------------------------------------------------------------------
+AFTER THE EXERCISES - full cleanup
+--------------------------------------------------------------------
+docker compose -f docker-compose.cpu.yml down -v   # if compose stack still up
+docker stop ai-dev-cpu flask-srv 2>/dev/null
+docker rm ai-dev-cpu flask-srv 2>/dev/null
+docker rmi ai-dev-cpu ai-dev-cpu-flask 2>/dev/null
+docker system prune -f
